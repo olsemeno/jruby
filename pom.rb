@@ -6,7 +6,6 @@ project 'JRuby', 'https://github.com/jruby/jruby' do
   model_version '4.0.0'
   inception_year '2001'
   id 'org.jruby:jruby-parent', version
-  inherit 'org.sonatype.oss:oss-parent:7'
   packaging 'pom'
 
   description 'JRuby is the effort to recreate the Ruby (http://www.ruby-lang.org) interpreter in Java.'
@@ -46,9 +45,9 @@ project 'JRuby', 'https://github.com/jruby/jruby' do
                   :developer_connection => 'scm:git:ssh://git@jruby.org/jruby.git' )
 
   distribution do
-    site( :url => 'https://github.com/jruby/jruby',
-          :id => 'gh-pages',
-          :name => 'JRuby Site' )
+    repository( :url => 'https://repo.jfrog.io/artifactory/third-party-releases-local',
+          :id => 'repo21-releases',
+          :name => 'repo21-releases' )
   end
 
   properties( 'its.j2ee' => 'j2ee*/pom.xml',
@@ -83,7 +82,7 @@ project 'JRuby', 'https://github.com/jruby/jruby' do
               'jruby-launcher.version' => '1.1.6',
               'ant.version' => '1.9.8',
               'asm.version' => '6.2.1',
-              'jffi.version' => '1.2.18',
+              'jffi.version' => '1.2.16',
               'joda.time.version' => '2.9.9' )
 
   plugin_management do

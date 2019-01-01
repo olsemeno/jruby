@@ -56,8 +56,8 @@ public class MarshalCache {
 
     public void register(IRubyObject value) {
         assert !(value instanceof RubySymbol) : "Use registeredSymbolIndex for symbols";
-
-        linkCache.put(value, Integer.valueOf(linkCache.size()));
+        // https://www.jfrog.com/jira/browse/RTFACT-17453
+        //linkCache.put(value, Integer.valueOf(linkCache.size()));
     }
 
     public void registerSymbol(ByteList sym) {

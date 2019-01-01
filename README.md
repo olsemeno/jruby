@@ -1,8 +1,37 @@
 # JRuby - an implementation of the Ruby language on the JVM
+------------------------------------------------------------------
+# JFORG NOTES:
+This is a fork of [https://github.com/jruby/jruby] 
+
+Parts of JRuby library core are used in different areas of JFrog code (Artifactory, Package-indexer)  in order to parse and handle ruby packages and ruby gems metadata.
+
+* the 'release' branch started at version 9.2.5.0 tag in the master branch
+* this version solves the following performance issue [https://www.jfrog.com/jira/browse/RTFACT-17453]
+
+## BUILDING LOCALLY
+* mvn clean install
+
+## DEPLOY TO REPO21
+
+ Artifactory is configured to consume jruby jars (jruby-stdlib-jfrog and jruby-core-jfrog) from the following repository:
+ https://repo.jfrog.io/artifactory/third-party-releases-local/
+
+ in order to deploy JRuby jars to Repo21: 
+ 
+ cd lib
+ 
+ mvn deploy (will deploy jruby-stdlib-jfrog-9.2.5.0.jar and pom file to repo.jfrog.io)
+ 
+ cd ..
+ 
+ cd core 
+ 
+ mvn deploy (will deploy jruby-core-jfrog-9.2.5.0.jar and pom file to repo.jfrog.io)
+ 
+------------------------------------------------------------------
 
 Master: [![Build Status](https://travis-ci.org/jruby/jruby.svg?branch=master)](https://travis-ci.org/jruby/jruby)
 9.1 branch: [![Build Status](https://travis-ci.org/jruby/jruby.svg?branch=jruby-9.1)](https://travis-ci.org/jruby/jruby/branches)
-
 ## About
 
 JRuby is an implementation of the [Ruby language](http://www.ruby-lang.org)
