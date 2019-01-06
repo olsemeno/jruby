@@ -68,6 +68,9 @@ class ServiceFinder<T> {
 
     private static List<String> readClassNames(Enumeration<URL> urls) {
         String encoding = System.getProperty("file.encoding");
+        if (encoding.equals("UTF8")) {
+            encoding = "UTF-8";
+        }
         ArrayList<String> names = new ArrayList<String>();
         while ( urls.hasMoreElements() ) {
             URL url = null;
