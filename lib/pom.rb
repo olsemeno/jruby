@@ -36,7 +36,7 @@ bundled_gems = [
     ['net-telnet', '0.1.1'],
     ['power_assert', '${power_assert.version}'],
     ['rake', '${rake.version}'],
-    ['test-unit', '${test-unit.version}'],
+    # ['test-unit', '${test-unit.version}'],
     ['xmlrpc', '0.3.0'],
 ]
 
