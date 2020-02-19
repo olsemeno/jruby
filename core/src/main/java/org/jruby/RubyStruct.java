@@ -197,11 +197,11 @@ public class RubyStruct extends RubyObject {
         RubyArray member = runtime.newArray();
 
         int argc = args.length;
-        if (args[args.length - 1] instanceof RubyHash) {
+        final IRubyObject opts = args[args.length - 1];
+        if (opts instanceof RubyHash) {
             argc--;
-            RubyHash kwArgs = args[args.length - 1].convertToHash();
-            IRubyObject[] rets = ArgsUtil.extractKeywordArgs(runtime.getCurrentContext(), kwArgs, "keyword_init");
-            keywordInit = rets[0].isTrue();
+            IRubyObject ret = ArgsUtil.extractKeywordArg(runtime.getCurrentContext(), (RubyHash) opts, "keyword_init");
+            keywordInit = ret != null && ret.isTrue();
         }
 
         for (int i = (name == null && !nilName) ? 0 : 1; i < argc; i++) {
@@ -224,7 +224,7 @@ public class RubyStruct extends RubyObject {
         if (name == null || nilName) {
             newStruct = RubyClass.newClass(runtime, superClass);
             newStruct.setAllocator(STRUCT_INSTANCE_ALLOCATOR);
-            newStruct.makeMetaClass(superClass.getMetaClass());
+            newStruct.makeMetaClass(superClass.metaClass);
             newStruct.inherit(superClass);
         } else {
             if (!IdUtil.isConstant(name)) {
@@ -471,7 +471,7 @@ public class RubyStruct extends RubyObject {
             result[i] = member.eltInternal(i);
         }
 
-        return RubyArray.newArrayNoCopy(type.getClassRuntime(), result);
+        return RubyArray.newArrayNoCopy(type.runtime, result);
     }
 
     @Deprecated // NOTE: no longer used ... should it get deleted?
@@ -567,7 +567,7 @@ public class RubyStruct extends RubyObject {
     public IRubyObject eql_p(ThreadContext context, IRubyObject other) {
         if (this == other) return context.tru;
         if (!(other instanceof RubyStruct)) return context.fals;
-        if (getMetaClass() != other.getMetaClass()) {
+        if (metaClass != getMetaClass(other)) {
             return context.fals;
         }
 

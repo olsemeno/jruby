@@ -8,9 +8,9 @@ project 'JRuby', 'https://github.com/jruby/jruby' do
   id 'org.jruby:jruby-parent', version
   packaging 'pom'
 
-  description 'JRuby is the effort to recreate the Ruby (http://www.ruby-lang.org) interpreter in Java.'
+  description 'JRuby is the effort to recreate the Ruby (https://www.ruby-lang.org) interpreter in Java.'
 
-  organization 'JRuby', 'http://jruby.org'
+  organization 'JRuby', 'https://www.jruby.org'
 
   [ 'headius', 'enebo', 'wmeissner', 'BanzaiMan', 'mkristian' ].each do |name|
     developer name do
@@ -64,7 +64,7 @@ project 'JRuby', 'https://github.com/jruby/jruby' do
               'polyglot.dump.readonly' => 'true',
               'jruby.plugins.version' => '1.0.10',
 
-              'json.version' => '2.1.0',
+              'json.version' => '2.2.0',
               'rspec.version' => '3.7.0',
               'rspec-core.version' => '3.7.0',
               'rspec-expectations.version' => '3.7.0',
@@ -76,20 +76,20 @@ project 'JRuby', 'https://github.com/jruby/jruby' do
 
               # versions for default gems with bin executables
               # used in ./lib/pom.rb and ./maven/jruby-stdlib/pom.rb
-              'rdoc.version' => '6.0.1',
+              'rdoc.version' => '6.1.2',
               'rake.version' => '12.3.3',
               'jar-dependencies.version' => '0.4.0',
               'jruby-launcher.version' => '1.1.6',
               'ant.version' => '1.9.8',
-              'asm.version' => '6.2.1',
-              'jffi.version' => '1.2.16',
-              'joda.time.version' => '2.9.9' )
+              'asm.version' => '7.1',
+              'jffi.version' => '1.2.22',
+              'joda.time.version' => '2.10.5' )
 
   plugin_management do
     jar( 'junit:junit:4.12',
          :scope => 'test' )
 
-    plugin( 'org.apache.felix:maven-bundle-plugin:2.4.0',
+    plugin( 'org.apache.felix:maven-bundle-plugin:3.5.0',
             'instructions' => {
               'Export-Package' =>  'org.jruby.*;version=${project.version}',
               'Import-Package' =>  '!org.jruby.*, *;resolution:=optional',

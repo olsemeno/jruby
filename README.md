@@ -5,7 +5,7 @@ This is a fork of [https://github.com/jruby/jruby]
 
 Parts of JRuby library core are used in different areas of JFrog code (Artifactory, Package-indexer)  in order to parse and handle ruby packages and ruby gems metadata.
 
-* the 'release' branch started at version 9.2.5.0 tag in the master branch
+* the 'release' branch started at version 9.2.9.0 tag in the master branch
 * this version solves the following performance issue [https://www.jfrog.com/jira/browse/RTFACT-17453]
 
 ## BUILDING LOCALLY
@@ -20,13 +20,13 @@ Parts of JRuby library core are used in different areas of JFrog code (Artifacto
  
  cd lib
  
- mvn deploy (will deploy jruby-stdlib-jfrog-9.2.5.0.jar and pom file to repo.jfrog.io)
+ mvn deploy (will deploy jruby-stdlib-jfrog-9.2.9.0.jar and pom file to repo.jfrog.io)
  
  cd ..
  
  cd core 
  
- mvn deploy (will deploy jruby-core-jfrog-9.2.5.0.jar and pom file to repo.jfrog.io)
+ mvn deploy (will deploy jruby-core-jfrog-9.2.9.0.jar and pom file to repo.jfrog.io)
  
 ------------------------------------------------------------------
 
@@ -52,7 +52,7 @@ program, or many other possibilities.
 We're a welcoming community - you can talk to us on [#jruby on Freenode](http://richard.esplins.org/siwi/2011/07/08/getting-started-freenode-irc/).
 There are core team members in the EU and US time zones.
 
-Visit the [JRuby website](http://jruby.org) and the [JRuby wiki](https://github.com/jruby/jruby/wiki)
+Visit the [JRuby website](https://www.jruby.org/) and the [JRuby wiki](https://github.com/jruby/jruby/wiki)
 for more information.
 
 ## Getting JRuby
@@ -88,15 +88,19 @@ For [`rvm`](https://rvm.io) you can simply do:
 $ rvm install jruby
 ```
 
-You can also [download packages from the JRuby website](http://jruby.org/download) that
+Using [`Homebrew`](https://brew.sh/) works too:
+
+```
+$ brew install jruby
+```
+
+You can also [download packages from the JRuby website](https://www.jruby.org/download) that
 you can unpack and run in place.
 
 ## Building JRuby
 
 See [BUILDING](BUILDING.md) for information about prerequisites, how to compile JRuby from source
 and how to test it.
-
-Alternatively, if you need to test out some unreleased bits, there's [nightly builds](http://jruby.org/nightly).
 
 ## Authors
 
