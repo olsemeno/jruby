@@ -172,6 +172,10 @@ public final class StringSupport {
         return new StringBuilder(str1.length() + str2.length()).append(str1).append(str2);
     }
 
+    public static String concat(final String str1, final String str2) {
+        return new StringBuilder(str1.length() + str2.length()).append(str1).append(str2).toString();
+    }
+
     public static String delete(final String str, final char c) { // str.replaceAll(c.toString(), "")
         char[] ary = null; int end = 0, s = 0;
         for (int i = 0; i < str.length(); i++) {
@@ -623,6 +627,21 @@ public final class StringSupport {
         return p;
     }
 
+    /**
+     * Return the byte offset of the nth character {@code n} in the given byte array between {@code p} and {@code n} using
+     * {@code enc} as the encoding.
+     *
+     * Note that the resulting offset will absolute, and therefore >= {@code p}. Subtract {@code p} to get a relative
+     * offset.
+     *
+     * @param enc the encoding of the characters in the byte array
+     * @param bytes the byte array
+     * @param p starting offset
+     * @param end limit offset
+     * @param n character offset to find
+     * @return the byte offset of the requested character, or -1 if the requested character offset is outside
+     *         the given byte offset range
+     */
     public static int nth(Encoding enc, byte[]bytes, int p, int end, int n) {
         return nth(enc, bytes, p, end, n, enc.isSingleByte());
     }
@@ -1614,6 +1633,38 @@ public final class StringSupport {
 
     public static boolean isSingleByteOptimizable(CodeRangeable string, Encoding encoding) {
         return string.getCodeRange() == CR_7BIT || encoding.maxLength() == 1;
+    }
+
+    /**
+     *
+     * @param source string to find index within
+     * @param other string to match in source
+     * @param offset in bytes to start looking
+     * @param enc encoding to use to walk the source string.
+     * @return
+     */
+    public static int index(ByteList source, ByteList other, int offset, Encoding enc) {
+        int sourceLen = source.realSize();
+        int sourceBegin = source.begin();
+        int otherLen = other.realSize();
+
+        if (otherLen == 0) return offset;
+        if (sourceLen - offset < otherLen) return -1;
+
+        byte[] sourceBytes = source.getUnsafeBytes();
+        int p = sourceBegin + offset;
+        int end = p + sourceLen;
+
+        while (true) {
+            int pos = source.indexOf(other, p - sourceBegin);
+            if (pos < 0) return pos;
+            pos -= (p - sourceBegin);
+            int t = enc.rightAdjustCharHead(sourceBytes, p, p + pos, end);
+            if (t == p + pos) return pos + offset;
+            if ((sourceLen -= t - p) <= 0) return -1;
+            offset += t - p;
+            p = t;
+        }
     }
 
     public static int index(CodeRangeable sourceString, CodeRangeable otherString, int offset, Encoding enc) {

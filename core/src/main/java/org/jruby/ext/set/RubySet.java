@@ -131,13 +131,40 @@ public class RubySet extends RubyObject implements Set {
         setInstanceVariable("@hash", hash); // MRI compat with set.rb
     }
 
-    RubySet newSet(final Ruby runtime) {
-        RubySet set = new RubySet(runtime, getMetaClass());
+    /**
+     * Construct a new Set with the same class as this one.
+     *
+     * @param runtime the current runtime
+     * @return a new Set
+     */
+    RubySet newSetFast(final Ruby runtime) {
+        return newSet(runtime, getMetaClass());
+    }
+
+    /**
+     * Construct a new Set. The Set class will be retrieved from the global namespace.
+     *
+     * @param runtime the current runtime
+     * @return a new Set
+     */
+    public static RubySet newSet(final Ruby runtime) {
+        return newSet(runtime, (RubyClass) runtime.getClassFromPath("Set"));
+    }
+
+    /**
+     * Construct a new Set.
+     *
+     * @param runtime the current runtime
+     * @param metaclass the class to assign to the new set
+     * @return a new Set
+     */
+    public static RubySet newSet(final Ruby runtime, final RubyClass metaclass) {
+        RubySet set = new RubySet(runtime, metaclass);
         set.allocHash(runtime);
         return set;
     }
 
-    private RubySet newSet(final ThreadContext context, final RubyClass metaClass, final RubyArray elements) {
+    private static RubySet newSet(final ThreadContext context, final RubyClass metaClass, final RubyArray elements) {
         final RubySet set = new RubySet(context.runtime, metaClass);
         return set.initSet(context, elements.toJavaArrayMaybeUnsafe(), 0, elements.size());
     }
@@ -325,7 +352,7 @@ public class RubySet extends RubyObject implements Set {
 
     @JRubyMethod(name = "empty?")
     public IRubyObject empty_p(ThreadContext context) {
-        return context.runtime.newBoolean( isEmpty() );
+        return RubyBoolean.newBoolean(context,  isEmpty() );
     }
 
     @JRubyMethod(name = "clear")
@@ -337,7 +364,7 @@ public class RubySet extends RubyObject implements Set {
     }
 
     protected void clearImpl() {
-        hash.rb_clear();
+        hash.rb_clear(getRuntime().getCurrentContext());
     }
 
     /**
@@ -463,7 +490,7 @@ public class RubySet extends RubyObject implements Set {
     // Returns a new set that is a copy of the set, flattening each containing set recursively.
     @JRubyMethod
     public RubySet flatten(final ThreadContext context) {
-        return newSet(context.runtime).flatten_merge(context, this);
+        return newSetFast(context.runtime).flatten_merge(context, this);
     }
 
     @JRubyMethod(name = "flatten!")
@@ -481,7 +508,7 @@ public class RubySet extends RubyObject implements Set {
      */
     @JRubyMethod(name = "include?", alias = { "member?", "===" })
     public RubyBoolean include_p(final ThreadContext context, IRubyObject obj) {
-        return context.runtime.newBoolean( containsImpl(obj) );
+        return RubyBoolean.newBoolean(context,  containsImpl(obj) );
     }
 
     final boolean containsImpl(IRubyObject obj) {
@@ -503,7 +530,7 @@ public class RubySet extends RubyObject implements Set {
                 return this.hash.op_ge(context, ((RubySet) set).hash);
             }
             // size >= set.size && set.all? { |o| include?(o) }
-            return context.runtime.newBoolean(
+            return RubyBoolean.newBoolean(context,
                     size() >= ((RubySet) set).size() && allElementsIncluded((RubySet) set)
             );
         }
@@ -518,7 +545,7 @@ public class RubySet extends RubyObject implements Set {
                 return this.hash.op_gt(context, ((RubySet) set).hash);
             }
             // size >= set.size && set.all? { |o| include?(o) }
-            return context.runtime.newBoolean(
+            return RubyBoolean.newBoolean(context,
                     size() > ((RubySet) set).size() && allElementsIncluded((RubySet) set)
             );
         }
@@ -532,7 +559,7 @@ public class RubySet extends RubyObject implements Set {
                 return this.hash.op_le(context, ((RubySet) set).hash);
             }
             // size >= set.size && set.all? { |o| include?(o) }
-            return context.runtime.newBoolean(
+            return RubyBoolean.newBoolean(context,
                     size() <= ((RubySet) set).size() && allElementsIncluded((RubySet) set)
             );
         }
@@ -546,7 +573,7 @@ public class RubySet extends RubyObject implements Set {
                 return this.hash.op_lt(context, ((RubySet) set).hash);
             }
             // size >= set.size && set.all? { |o| include?(o) }
-            return context.runtime.newBoolean(
+            return RubyBoolean.newBoolean(context,
                     size() < ((RubySet) set).size() && allElementsIncluded((RubySet) set)
             );
         }
@@ -559,7 +586,7 @@ public class RubySet extends RubyObject implements Set {
     @JRubyMethod(name = "intersect?")
     public IRubyObject intersect_p(final ThreadContext context, IRubyObject set) {
         if ( set instanceof RubySet ) {
-            return context.runtime.newBoolean( intersect((RubySet) set) );
+            return RubyBoolean.newBoolean(context,  intersect((RubySet) set) );
         }
         throw context.runtime.newArgumentError("value must be a set");
     }
@@ -587,7 +614,7 @@ public class RubySet extends RubyObject implements Set {
     @JRubyMethod(name = "disjoint?")
     public IRubyObject disjoint_p(final ThreadContext context, IRubyObject set) {
         if ( set instanceof RubySet ) {
-            return context.runtime.newBoolean( ! intersect((RubySet) set) );
+            return RubyBoolean.newBoolean(context,  ! intersect((RubySet) set) );
         }
         throw context.runtime.newArgumentError("value must be a set");
     }
@@ -603,12 +630,7 @@ public class RubySet extends RubyObject implements Set {
     }
 
     private RubyEnumerator.SizeFn enumSize() {
-        return new RubyEnumerator.SizeFn() {
-            @Override
-            public IRubyObject size(IRubyObject[] args) {
-                return getRuntime().newFixnum( RubySet.this.size() );
-            }
-        };
+        return (context, args) -> context.runtime.newFixnum( size() );
     }
 
     /**
@@ -890,7 +912,7 @@ public class RubySet extends RubyObject implements Set {
 
     @JRubyMethod(name = "reset")
     public IRubyObject reset(ThreadContext context) {
-        this.hash.rehash();
+        this.hash.rehash(context);
         return this;
     }
 
@@ -931,7 +953,7 @@ public class RubySet extends RubyObject implements Set {
             final IRubyObject key = block.yield(context, i);
             IRubyObject set;
             if ( ( set = h.fastARef(key) ) == null ) {
-                h.fastASet(key, set = newSet(runtime));
+                h.fastASet(key, set = newSetFast(runtime));
             }
             ((RubySet) set).invokeAdd(context, i);
         }
@@ -1018,7 +1040,7 @@ public class RubySet extends RubyObject implements Set {
                 @Override
                 protected IRubyObject doYield(ThreadContext context, Block block, IRubyObject css) {
                     // set.add( self.class.new(css) ) :
-                    set.addImpl(runtime, RubySet.this.newSet(context, Set, (RubyArray) css));
+                    set.addImpl(runtime, newSet(context, Set, (RubyArray) css));
                     return context.nil;
                 }
             })

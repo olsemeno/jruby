@@ -5,8 +5,12 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.reflect.Array;
 
+import java.net.BindException;
 import java.net.PortUnreachableException;
 import java.nio.channels.ClosedChannelException;
+import java.nio.channels.NonReadableChannelException;
+import java.nio.channels.NonWritableChannelException;
+import java.nio.channels.NotYetConnectedException;
 import java.nio.charset.Charset;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.AtomicMoveNotSupportedException;
@@ -22,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.StringTokenizer;
 import java.util.concurrent.Callable;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 import jnr.constants.platform.Errno;
@@ -33,7 +38,9 @@ import org.jruby.ast.Node;
 import org.jruby.ast.UnnamedRestArgNode;
 import org.jruby.ast.types.INameNode;
 import org.jruby.ast.RequiredKeywordArgumentValueNode;
+import org.jruby.ast.util.ArgsUtil;
 import org.jruby.common.IRubyWarnings.ID;
+import org.jruby.exceptions.ArgumentError;
 import org.jruby.exceptions.RaiseException;
 import org.jruby.exceptions.Unrescuable;
 import org.jruby.internal.runtime.methods.*;
@@ -83,6 +90,7 @@ import org.jruby.util.io.EncodingUtils;
 public class Helpers {
 
     public static final Pattern SEMICOLON_PATTERN = Pattern.compile(";");
+    public static final int MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8; // safe max for new byte[], see GH-6671
 
     public static RubyClass getSingletonClass(Ruby runtime, IRubyObject receiver) {
         if (receiver instanceof RubyFixnum || receiver instanceof RubySymbol) {
@@ -256,16 +264,30 @@ public class Helpers {
         } catch (AccessDeniedException ade) {
             return Errno.EACCES;
         } catch (DirectoryNotEmptyException dnee) {
-            switch (dnee.getMessage()) {
-                case "File exists":
-                    return Errno.EEXIST;
-                case "Directory not empty":
-                    return Errno.ENOTEMPTY;
+            return errnoFromMessage(dnee);
+        } catch (BindException be) {
+            return errnoFromMessage(be);
+        } catch (NotYetConnectedException nyce) {
+            return Errno.ENOTCONN;
+        } catch (NonReadableChannelException | NonWritableChannelException nrce) {
+            // raised by NIO for invalid combinations of file options (read + truncate, for example)
+            return Errno.EINVAL;
+        } catch (IllegalArgumentException nrce) {
+            return Errno.EINVAL;
+        } catch (IOException ioe) {
+            String message = ioe.getMessage();
+            // Raised on Windows for process launch with missing file
+            if (message.endsWith("The system cannot find the file specified")) {
+                return Errno.ENOENT;
             }
         } catch (Throwable t2) {
             // fall through
         }
 
+        return errnoFromMessage(t);
+    }
+
+    private static Errno errnoFromMessage(Throwable t) {
         final String errorMessage = t.getMessage();
 
         if (errorMessage != null) {
@@ -296,6 +318,9 @@ public class Helpers {
                     return Errno.ENETUNREACH;
                 case "Address already in use":
                     return Errno.EADDRINUSE;
+                case "Cannot assign requested address":
+                case "Can't assign requested address":
+                    return Errno.EADDRNOTAVAIL;
                 case "No space left on device":
                     return Errno.ENOSPC;
                 case "Message too large": // Alpine Linux
@@ -310,26 +335,84 @@ public class Helpers {
                 case "permission denied":
                 case "Permission denied":
                     return Errno.EACCES;
-                case "Protocol family unavailable":
-                    return Errno.EADDRNOTAVAIL;
+                case "Protocol family not supported":
+                    return Errno.EPFNOSUPPORT;
             }
         }
         return null;
     }
 
     /**
-     * Java does not give us enough information for specific error conditions
-     * so we are reduced to divining them through string matches...
+     * Construct an appropriate error (which may ultimately not be an IOError) for a given IOException.
      *
-     * TODO: Should ECONNABORTED get thrown earlier in the descriptor itself or is it ok to handle this late?
-     * TODO: Should we include this into Errno code somewhere do we can use this from other places as well?
+     * If this method is used on an exception which can't be translated to a Ruby error using {@link #newErrorFromException(Ruby, Throwable)}
+     * then a RuntimeError will be returned, due to the unhandled exception type.
+     *
+     * @param runtime the current runtime
+     * @param ex the exception to translate into a Ruby error
+     * @return a RaiseException subtype instance appropriate for the given exception
      */
     public static RaiseException newIOErrorFromException(Ruby runtime, IOException ex) {
-        Errno errno = errnoFromException(ex);
+        return (RaiseException) newErrorFromException(runtime, ex, (t) -> runtime.newRuntimeError("unexpected Java exception: " + ex.toString()));
+    }
 
-        if (errno == null) throw runtime.newIOError(ex.getLocalizedMessage());
+    /**
+     * Return a Ruby-friendly Throwable for a given Throwable.
+     *
+     * The following translations will be attempted in order:
+     *
+     * <ul>
+     *     <li>if the Throwable is already a Ruby exception type, return it as-is</li>
+     *     <li>convert to a Ruby Errno exception via {@link #errnoFromException(Throwable)}</li>
+     *     <li>convert to a Ruby IOError if the exception is a java.io.IOException</li>
+     *     <li>using the provided function as a fallback transformation</li>
+     * </ul>
+     *
+     * @param runtime the current runtime
+     * @param t the exception to translate into a Ruby error
+     * @param els a fallback function if the exception cannot be translated
+     * @return a RaiseException subtype instance appropriate for the given exception
+     */
+    public static Throwable newErrorFromException(Ruby runtime, Throwable t, Function<Throwable, Throwable> els) {
+        if (t instanceof RaiseException) {
+            // already a Ruby-friendly Throwable
+            return t;
+        }
 
-        throw runtime.newErrnoFromErrno(errno, ex.getLocalizedMessage());
+        Errno errno = errnoFromException(t);
+
+        if (errno != null) {
+            return runtime.newErrnoFromErrno(errno, t.getLocalizedMessage());
+        } else if (t instanceof IOException) {
+            return runtime.newIOError(t.getLocalizedMessage());
+        }
+
+        return els.apply(t);
+    }
+
+    /**
+     * Simplified form of Ruby#newErrorFromException with no default function.
+     *
+     * @param runtime the current runtime
+     * @param t the exception to translate into a Ruby error
+     * @return a RaiseException subtype instance appropriate for the given exception
+     */
+    public static Throwable newErrorFromException(Ruby runtime, Throwable t) {
+        return newErrorFromException(runtime, t, t0 -> t0);
+    }
+
+    /**
+     * Throw an appropriate Ruby-friendly error or exception for a given Java exception.
+     *
+     * This method will first attempt to translate the exception into a Ruby error using {@link #newErrorFromException(Ruby, Throwable, Function)}.
+     *
+     * Failing that, it will raise the original Java exception as-is.
+     *
+     * @param runtime the current runtime
+     * @param t the exception to raise as an error, if appropriate, or as itself otherwise
+     */
+    public static void throwErrorFromException(Ruby runtime, Throwable t) {
+        throwException(newErrorFromException(runtime, t));
     }
 
     public static RubyModule getNthScopeModule(StaticScope scope, int depth) {
@@ -385,8 +468,113 @@ public class Helpers {
         }
     }
 
-    private static class MethodMissingMethod extends DynamicMethod {
-        private final CacheEntry entry;
+    /**
+     * Calculate a buffer length based on the required length, expanding by 1.5x or to the maximum array size.
+     *
+     * @param length the required length
+     * @return a larger buffer length with extra room for growth, or else the max array size
+     * @throws OutOfMemoryError if the requested length is greated than the max array size
+     */
+    public static int calculateBufferLength(int length) {
+        if (length > MAX_ARRAY_SIZE) throw new OutOfMemoryError("Requested array size exceeds VM limit");
+
+        int newLength;
+        try {
+            // Try to allocate 1.5 * length but that might take us outside the range of int
+            newLength = Math.addExact(length, length >>> 1);
+        } catch (ArithmeticException e) {
+            newLength = MAX_ARRAY_SIZE;
+        }
+        return newLength;
+    }
+
+    /**
+     * Same as {@link #calculateBufferLength(int)} but raises a Ruby ArgumentError.
+     */
+    public static int calculateBufferLength(Ruby runtime, int length) {
+        if (length > MAX_ARRAY_SIZE) throw runtime.newArgumentError("argument too big");
+
+        int newLength;
+        try {
+            // Try to allocate 1.5 * length but that might take us outside the range of int
+            newLength = Math.addExact(length, length >>> 1);
+        } catch (ArithmeticException e) {
+            newLength = MAX_ARRAY_SIZE;
+        }
+        return newLength;
+    }
+
+    /**
+     * Calculate a buffer length based on a base size and a multiplier. If the resulting size exceeds MAX_ARRAY_SIZE,
+     * an {@link ArgumentError} will be thrown, similar to when asking the JVM to allocate a too-large array.
+     *
+     * @param base the base size
+     * @param multiplier the multiplier
+     * @return the multiplied size, if valid
+     * @throws ArgumentError if the requested length is greated than the max array size
+     */
+    public static int multiplyBufferLength(Ruby runtime, int base, int multiplier) {
+        try {
+            int newSize = Math.multiplyExact(base, multiplier);
+
+            if (newSize <= MAX_ARRAY_SIZE) {
+                return newSize;
+            }
+
+            // fall through to error below
+        } catch (ArithmeticException e) {
+            // fall through to error below
+        }
+
+        throw runtime.newArgumentError("argument too big");
+    }
+
+    /**
+     * Calculate a buffer length based on a base size and a extra size. If the resulting size exceeds MAX_ARRAY_SIZE
+     * and the extra size is nonzero, use the MAX_ARRAY_SIZE as the buffer length.
+     *
+     * @param runtime the runtime
+     * @param base the base size
+     * @param extra the extra buffer size
+     * @return the combined buffer size, or MAX_ARRAY_SIZE
+     * @throws ArgumentError if the original or combined size cannot be accommodated by MAX_ARRAY_SIZE
+     */
+    public static int addBufferLength(Ruby runtime, int base, int extra) {
+        try {
+            int newSize = Math.addExact(base, extra);
+
+            if (newSize <= MAX_ARRAY_SIZE) {
+                return newSize;
+            }
+
+            // can't accommodate all of extra buffer size, but do as much as we can
+            if (extra > 0) {
+                return MAX_ARRAY_SIZE;
+            }
+
+            // fall through to error below
+        } catch (ArithmeticException e) {
+            // fall through to error below
+        }
+
+        throw runtime.newArgumentError("argument too big");
+    }
+
+    /**
+     * Check that the buffer length requested is within the valid range of 0 to MAX_ARRAY_SIZE, or raise an argument
+     * error.
+     */
+    public static int validateBufferLength(Ruby runtime, int length) {
+        if (length < 0) {
+            throw runtime.newArgumentError("negative argument");
+        } else if (length > MAX_ARRAY_SIZE) {
+            throw runtime.newArgumentError("argument too big");
+        }
+        return length;
+    }
+
+    public static class MethodMissingMethod extends DynamicMethod {
+        public final CacheEntry entry;
         private final CallType lastCallStatus;
         private final Visibility lastVisibility;
 
@@ -1956,10 +2144,9 @@ public class Helpers {
      * @return
      */
     public static RubyBoolean rbEqual(ThreadContext context, IRubyObject a, IRubyObject b) {
-        Ruby runtime = context.runtime;
-        if (a == b) return runtime.getTrue();
+        if (a == b) return context.tru;
         IRubyObject res = sites(context).op_equal.call(context, a, a, b);
-        return runtime.newBoolean(res.isTrue());
+        return RubyBoolean.newBoolean(context, res.isTrue());
     }
 
     /**
@@ -1971,10 +2158,9 @@ public class Helpers {
      * @return
      */
     public static RubyBoolean rbEqual(ThreadContext context, IRubyObject a, IRubyObject b, CallSite equal) {
-        Ruby runtime = context.runtime;
-        if (a == b) return runtime.getTrue();
+        if (a == b) return context.tru;
         IRubyObject res = equal.call(context, a, a, b);
-        return runtime.newBoolean(res.isTrue());
+        return RubyBoolean.newBoolean(context, res.isTrue());
     }
 
     /**
@@ -1986,10 +2172,9 @@ public class Helpers {
      * @return
      */
     public static RubyBoolean rbEql(ThreadContext context, IRubyObject a, IRubyObject b) {
-        Ruby runtime = context.runtime;
-        if (a == b) return runtime.getTrue();
+        if (a == b) return context.tru;
         IRubyObject res = invokedynamic(context, a, EQL, b);
-        return runtime.newBoolean(res.isTrue());
+        return RubyBoolean.newBoolean(context, res.isTrue());
     }
 
     /**
@@ -2380,6 +2565,43 @@ public class Helpers {
         return invokedynamic(context, self, MethodNames.values()[index], arg0);
     }
 
+    /**
+     * @note Assumes exception: ... to be the only (optional) keyword argument!
+     * @param context
+     * @param opts
+     * @return false if `exception: false`, true otherwise
+     */
+    public static boolean extractExceptionOnlyArg(ThreadContext context, RubyHash opts) {
+        return ArgsUtil.extractKeywordArg(context, opts, "exception") != context.fals;
+    }
+
+    /**
+     * @note Assumes exception: ... to be the only (optional) keyword argument!
+     * @param context
+     * @param opts the keyword args hash
+     * @param defValue to return when no keyword options
+     * @return false if `exception: false`, true (or default value) otherwise
+     */
+    public static boolean extractExceptionOnlyArg(ThreadContext context, IRubyObject opts, boolean defValue) {
+        IRubyObject hash = TypeConverter.checkHashType(context.runtime, opts);
+        if (hash != context.nil) {
+            return extractExceptionOnlyArg(context, (RubyHash) opts);
+        }
+        return defValue;
+    }
+
+    /**
+     * @note Assumes exception: ... to be the only (optional) keyword argument!
+     * @param context
+     * @param args method args
+     * @param defValue to return when no keyword options
+     * @return false if `exception: false`, true (or default value) otherwise
+     */
+    public static boolean extractExceptionOnlyArg(ThreadContext context, IRubyObject[] args, boolean defValue) {
+        if (args.length == 0) return defValue;
+        return extractExceptionOnlyArg(context, args[args.length - 1], defValue);
+    }
+
     public static void throwException(final Throwable e) {
         Helpers.<RuntimeException>throwsUnchecked(e);
     }
@@ -2498,6 +2720,13 @@ public class Helpers {
         return values;
     }
 
+    public static IRubyObject[] arrayOf(IRubyObject first, IRubyObject... values) {
+        IRubyObject[] newValues = new IRubyObject[values.length + 1];
+        newValues[0] = first;
+        System.arraycopy(values, 0, newValues, 1, values.length);
+        return newValues;
+    }
+
     public static <T> T[] arrayOf(Class<T> t, int size, T fill) {
         T[] ary = (T[])Array.newInstance(t, size);
         Arrays.fill(ary, fill);
@@ -2544,6 +2773,17 @@ public class Helpers {
         }
 
         return (RubyFixnum) hval;
+    }
+
+    // MRI: mult_and_mix, roughly since we have no uint64 type
+    public static long multAndMix(long seed, long hash) {
+        long hm1 = seed >> 32, hm2 = hash >> 32;
+        long lm1 = seed, lm2 = hash;
+        long v64_128 = hm1 * hm2;
+        long v32_96 = hm1 * lm2 + lm1 * hm2;
+        long v1_32 = lm1 * lm2;
+
+        return (v64_128 + (v32_96 >> 32)) ^ ((v32_96 << 32) + v1_32);
     }
 
     public static long murmurCombine(long h, long i)

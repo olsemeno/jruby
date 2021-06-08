@@ -59,6 +59,14 @@ VALUE kernel_spec_rb_block_call_multi_arg(VALUE self, VALUE ary) {
   return rb_block_call(ary, rb_intern("inject"), 1, method_args, block_call_inject_multi_arg, Qnil);
 }
 
+static VALUE return_extra_data(RB_BLOCK_CALL_FUNC_ARGLIST(yield_value, extra_data)) {
+  return extra_data;
+}
+
+VALUE rb_block_call_extra_data(VALUE self, VALUE object) {
+  return rb_block_call(object, rb_intern("instance_exec"), 0, NULL, return_extra_data, object);
+}
+
 VALUE kernel_spec_rb_block_call_no_func(VALUE self, VALUE ary) {
   return rb_block_call(ary, rb_intern("map"), 0, NULL, NULL, Qnil);
 }
@@ -297,6 +305,13 @@ static VALUE kernel_spec_rb_funcall_with_block(VALUE self, VALUE obj, VALUE meth
   return rb_funcall_with_block(obj, SYM2ID(method), 0, NULL, block);
 }
 
+static VALUE kernel_spec_rb_funcall_many_args(VALUE self, VALUE obj, VALUE method) {
+  return rb_funcall(obj, SYM2ID(method), 15,
+                    INT2FIX(15), INT2FIX(14), INT2FIX(13), INT2FIX(12), INT2FIX(11),
+                    INT2FIX(10), INT2FIX(9), INT2FIX(8), INT2FIX(7), INT2FIX(6),
+                    INT2FIX(5), INT2FIX(4), INT2FIX(3), INT2FIX(2), INT2FIX(1));
+}
+
 void Init_kernel_spec(void) {
   VALUE cls = rb_define_class("CApiKernelSpecs", rb_cObject);
   rb_define_method(cls, "rb_block_given_p", kernel_spec_rb_block_given_p, 0);
@@ -304,6 +319,7 @@ void Init_kernel_spec(void) {
   rb_define_method(cls, "rb_block_call", kernel_spec_rb_block_call, 1);
   rb_define_method(cls, "rb_block_call_multi_arg", kernel_spec_rb_block_call_multi_arg, 1);
   rb_define_method(cls, "rb_block_call_no_func", kernel_spec_rb_block_call_no_func, 1);
+  rb_define_method(cls, "rb_block_call_extra_data", rb_block_call_extra_data, 1);
   rb_define_method(cls, "rb_block_proc", kernel_spec_rb_block_proc, 0);
   rb_define_method(cls, "rb_block_lambda", kernel_spec_rb_block_lambda, 0);
   rb_define_method(cls, "rb_frame_this_func_test", kernel_spec_rb_frame_this_func, 0);
@@ -333,6 +349,7 @@ void Init_kernel_spec(void) {
   rb_define_method(cls, "rb_make_backtrace", kernel_spec_rb_make_backtrace, 0);
   rb_define_method(cls, "rb_obj_method", kernel_spec_rb_obj_method, 2);
   rb_define_method(cls, "rb_funcall3", kernel_spec_rb_funcall3, 2);
+  rb_define_method(cls, "rb_funcall_many_args", kernel_spec_rb_funcall_many_args, 2);
   rb_define_method(cls, "rb_funcall_with_block", kernel_spec_rb_funcall_with_block, 3);
 }
 

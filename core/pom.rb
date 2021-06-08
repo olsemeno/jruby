@@ -40,17 +40,17 @@ project 'JRuby Core' do
   jar 'org.ow2.asm:asm-util:${asm.version}'
 
   # exclude jnr-ffi to avoid problems with shading and relocation of the asm packages
-  jar 'com.github.jnr:jnr-netdb:1.1.6', :exclusions => ['com.github.jnr:jnr-ffi']
-  jar 'com.github.jnr:jnr-enxio:0.23', :exclusions => ['com.github.jnr:jnr-ffi']
-  jar 'com.github.jnr:jnr-unixsocket:0.24', :exclusions => ['com.github.jnr:jnr-ffi']
-  jar 'com.github.jnr:jnr-posix:3.0.51', :exclusions => ['com.github.jnr:jnr-ffi']
-  jar 'com.github.jnr:jnr-constants:0.9.14', :exclusions => ['com.github.jnr:jnr-ffi']
-  jar 'com.github.jnr:jnr-ffi:2.1.11'
+  jar 'com.github.jnr:jnr-netdb:1.2.0', :exclusions => ['com.github.jnr:jnr-ffi']
+  jar 'com.github.jnr:jnr-enxio:0.32.6', :exclusions => ['com.github.jnr:jnr-ffi']
+  jar 'com.github.jnr:jnr-unixsocket:0.38.8', :exclusions => ['com.github.jnr:jnr-ffi']
+  jar 'com.github.jnr:jnr-posix:3.1.7', :exclusions => ['com.github.jnr:jnr-ffi']
+  jar 'com.github.jnr:jnr-constants:0.10.2', :exclusions => ['com.github.jnr:jnr-ffi']
+  jar 'com.github.jnr:jnr-ffi:2.2.4'
   jar 'com.github.jnr:jffi:${jffi.version}'
   jar 'com.github.jnr:jffi:${jffi.version}:native'
 
-  jar 'org.jruby.joni:joni:2.1.30'
-  jar 'org.jruby.jcodings:jcodings:1.0.45'
+  jar 'org.jruby.joni:joni:2.1.31'
+  jar 'org.jruby.jcodings:jcodings:1.0.46'
   jar 'org.jruby:dirgra:0.3'
 
   jar 'com.headius:invokebinder:1.11'
@@ -73,7 +73,7 @@ project 'JRuby Core' do
 
   jar 'me.qmx.jitescript:jitescript:0.4.1', :exclusions => ['org.ow2.asm:asm-all']
 
-  jar 'com.headius:backport9:1.3'
+  jar 'com.headius:backport9:1.8'
 
   jar 'javax.annotation:javax.annotation-api:1.3.1', scope: 'compile'
 
@@ -132,7 +132,7 @@ project 'JRuby Core' do
     execute_goals( 'create',
                    :id => 'jruby-revision',
                    :phase => 'generate-sources',
-                   'shortRevisionLength' =>  '7',
+                   'shortRevisionLength' =>  '10',
                    'buildNumberPropertyName' =>  'jruby.revision' )
   end
 
@@ -257,33 +257,41 @@ project 'JRuby Core' do
       includes 'META-INF/**/*'
     end
 
-    resource do
-      directory '${project.basedir}/src/main/resources'
-      includes '${Constants.java}'
-      target_path '${project.build.sourceDirectory}'
-      filtering 'true'
-    end
-
-    resource do
-      directory '${project.basedir}/..'
-      includes [ 'BSDL', 'COPYING', 'LEGAL', 'LICENSE.RUBY' ]
-      target_path '${project.build.outputDirectory}/META-INF/'
-    end
   end
 
+  plugin :resources do
+    execute_goals('copy-resources', phase: 'process-resources',
+                  outputDirectory: '${basedir}',
+                  resources: [
+                    {
+                      directory: 'src/main/resources',
+                      includes: '${Constants.java}',
+                      target_path: '${project.build.sourceDirectory}',
+                      filtering: 'true'
+                    },
+                    {
+                      directory: '..',
+                      includes: [ 'BSDL', 'COPYING', 'LEGAL', 'LICENSE.RUBY' ],
+                      target_path: '${project.build.sourceDirectory}/META-INF/'
+                    }
+                  ])
+  end
 
   plugin :shade do
     execute_goals( 'shade',
-                   :id => 'create lib/jruby.jar',
-                   :phase => 'package',
+                   id: 'create lib/jruby.jar',
+                   phase: 'package',
+                   artifactSet: {
+                       excludes: 'javax.annotation:javax.annotation-api'
+                   },
                    relocations: [
                        {pattern: 'org.objectweb', shadedPattern: 'org.jruby.org.objectweb' },
                    ],
-                   'outputFile' => '${jruby.basedir}/lib/jruby.jar',
-                   'transformers' => [ {'@implementation' => 'org.apache.maven.plugins.shade.resource.ManifestResourceTransformer',
-                                         'mainClass' => 'org.jruby.Main',
-                                         'manifestEntries' => {'Automatic-Module-Name' => 'org.jruby.dist'}}],
-                   'createSourcesJar' => '${create.sources.jar}'
+                   outputFile: '${jruby.basedir}/lib/jruby.jar',
+                   transformers: [ {'@implementation' => 'org.apache.maven.plugins.shade.resource.ManifestResourceTransformer',
+                                         mainClass: 'org.jruby.Main',
+                                         manifestEntries: {'Automatic-Module-Name' => 'org.jruby.dist'}}],
+                   createSourcesJar: '${create.sources.jar}',
     )
   end
 
@@ -294,14 +302,16 @@ project 'JRuby Core' do
       # regarding asm: lib/jruby, jruby-core and jruby-complete via maven
       plugin :shade do
         execute_goals( 'shade',
-                       :id => 'shade the asm classes',
-                       :phase => 'package',
-                       'artifactSet' => {
+                       id: 'shade dependencies into jar',
+                       phase: 'package',
+                       artifactSet: {
                          # IMPORTANT these needs to match exclusions in
                          # maven/jruby-complete/pom.rb
-                         'includes' => [ 'com.github.jnr:jnr-ffi',
-                                         'me.qmx.jitescript:jitescript',
-                                         'org.ow2.asm:*' ]
+                         includes: [ 'com.github.jnr:jnr-ffi',
+                                     'me.qmx.jitescript:jitescript',
+                                     'org.ow2.asm:*'
+                         ],
+                         excludes: 'javax.annotation:javax.annotation-api'
                        },
                        relocations: [
                            {pattern: 'org.objectweb', shadedPattern: 'org.jruby.org.objectweb' },
@@ -310,8 +320,9 @@ project 'JRuby Core' do
                        transformers: [ {'@implementation' => 'org.apache.maven.plugins.shade.resource.ManifestResourceTransformer',
                                          'mainClass' => 'org.jruby.Main',
                                          'manifestEntries' => {'Automatic-Module-Name' => 'org.jruby.core'}}],
-                       filters:
-                           {filter: {artifact: 'com.headius:invokebinder', excludes: {exclude: '**/module-info.class'}}}
+                       filters: [
+                           {artifact: 'com.headius:invokebinder', excludes: '**/module-info.class'}
+                       ]
         )
       end
     end
@@ -423,8 +434,8 @@ project 'JRuby Core' do
 
     plugin :source do
       execute_goals( 'jar-no-fork',
-                     :id => 'pack core sources',
-                     :phase => 'prepare-package' ) # Needs to run before the shade plugin
+                     id: 'pack core sources',
+                     phase: 'prepare-package') # Needs to run before the shade plugin
     end
   end
 end

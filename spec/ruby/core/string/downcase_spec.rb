@@ -68,10 +68,12 @@ describe "String#downcase" do
     -> { "ABC".downcase(:invalid_option) }.should raise_error(ArgumentError)
   end
 
-  it "taints result when self is tainted" do
-    "".taint.downcase.tainted?.should == true
-    "x".taint.downcase.tainted?.should == true
-    "X".taint.downcase.tainted?.should == true
+  ruby_version_is ''...'2.7' do
+    it "taints result when self is tainted" do
+      "".taint.downcase.tainted?.should == true
+      "x".taint.downcase.tainted?.should == true
+      "X".taint.downcase.tainted?.should == true
+    end
   end
 
   it "returns a subclass instance for subclasses" do
@@ -84,6 +86,12 @@ describe "String#downcase!" do
     a = "HeLlO"
     a.downcase!.should equal(a)
     a.should == "hello"
+  end
+
+  it "modifies self in place for non-ascii-compatible encodings" do
+    a = "HeLlO".encode("utf-16le")
+    a.downcase!
+    a.should == "hello".encode("utf-16le")
   end
 
   describe "full Unicode case mapping" do
@@ -109,6 +117,12 @@ describe "String#downcase!" do
       a = "CÅR"
       a.downcase!(:ascii)
       a.should == "cÅr"
+    end
+
+    it "works for non-ascii-compatible encodings" do
+      a = "ABC".encode("utf-16le")
+      a.downcase!(:ascii)
+      a.should == "abc".encode("utf-16le")
     end
   end
 

@@ -53,6 +53,11 @@ describe "C-API Kernel function" do
         i + 1
       end.should == [2, 4, 6]
     end
+
+    it "can pass extra data to the function" do
+      ary = [3]
+      @s.rb_block_call_extra_data(ary).should equal(ary)
+    end
   end
 
   describe "rb_frame_this_func" do
@@ -573,6 +578,20 @@ describe "C-API Kernel function" do
     end
   end
 
+  describe 'rb_funcall' do
+    before :each do
+      @obj = Object.new
+      class << @obj
+        def many_args(*args)
+          args
+        end
+      end
+    end
+
+    it "can call a public method with 10 arguments" do
+      @s.rb_funcall_many_args(@obj, :many_args).should == 15.downto(1).to_a
+    end
+  end
   describe 'rb_funcall_with_block' do
     before :each do
       @obj = Object.new

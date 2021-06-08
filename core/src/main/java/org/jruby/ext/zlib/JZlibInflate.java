@@ -67,14 +67,12 @@ public class JZlibInflate extends ZStream {
         JZlibInflate inflate = (JZlibInflate) klass.allocate();
         inflate.init(JZlib.DEF_WBITS);
 
-        IRubyObject result;
         try {
-            inflate.append(string.convertToString().getByteList());
+            return inflate.inflate(context, string, Block.NULL_BLOCK);
         } finally {
-            result = inflate.finish(context, Block.NULL_BLOCK);
+            inflate.finish(context, Block.NULL_BLOCK);
             inflate.close();
         }
-        return result;
     }
 
     @JRubyMethod(name = "initialize", optional = 1, visibility = PRIVATE)
@@ -204,7 +202,7 @@ public class JZlibInflate extends ZStream {
                 case com.jcraft.jzlib.JZlib.Z_OK:
                     flater.setInput(string.convertToString().getByteList().bytes(),
                             true);
-                    return getRuntime().getTrue();
+                    return context.tru;
                 case com.jcraft.jzlib.JZlib.Z_DATA_ERROR:
                     break;
                 default:
@@ -212,14 +210,14 @@ public class JZlibInflate extends ZStream {
             }
         }
         if (string.convertToString().getByteList().length() <= 0) {
-            return getRuntime().getFalse();
+            return context.fals;
         }
         flater.setInput(string.convertToString().getByteList().bytes(), true);
         switch (flater.sync()) {
             case com.jcraft.jzlib.JZlib.Z_OK:
-                return getRuntime().getTrue();
+                return context.tru;
             case com.jcraft.jzlib.JZlib.Z_DATA_ERROR:
-                return getRuntime().getFalse();
+                return context.fals;
             default:
                 throw RubyZlib.newStreamError(getRuntime(), "stream error");
         }

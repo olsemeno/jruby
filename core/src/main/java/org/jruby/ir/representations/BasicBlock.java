@@ -73,6 +73,14 @@ public class BasicBlock implements ExplicitVertexID, Comparable {
         return false;
     }
 
+    /**
+     * On an exception occurring in this block which BB should we go to?
+     * @return BB of exception handling or null if none.
+     */
+    public BasicBlock exceptionBB() {
+        return cfg.getRescuerBBFor(this);
+    }
+
     public boolean isEntryBB() {
         return cfg.getEntryBB() == this;
     }
@@ -228,7 +236,7 @@ public class BasicBlock implements ExplicitVertexID, Comparable {
                     ii.recordYieldSite(clonedBB, (YieldInstr)clonedInstr);
                 } else if (i instanceof NonlocalReturnInstr && clonedInstr instanceof CopyInstr) {
                     // non-local returns assign to method return variable but must jump to proper exit point
-                    clonedBB.addInstr(new JumpInstr(ii.getHostScope().getCFG().getExitBB().getLabel()));
+                    clonedBB.addInstr(new JumpInstr(ii.getHostScope().getFullInterpreterContext().getCFG().getExitBB().getLabel()));
                     // FIXME: enebo...I see no guarantee that this copy will be part of a return?  This behavior is
                     // masked in any case I can see with optimization to not use a copy but convert non-local to local return.
                 }

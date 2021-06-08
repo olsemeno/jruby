@@ -3,6 +3,7 @@ package org.jruby.ir.targets;
 import com.headius.invokebinder.Binder;
 import com.headius.invokebinder.Signature;
 import com.headius.invokebinder.SmartBinder;
+import com.headius.invokebinder.SmartHandle;
 import org.jcodings.Encoding;
 import org.jcodings.EncodingDB;
 import org.jruby.*;
@@ -11,6 +12,7 @@ import org.jruby.internal.runtime.GlobalVariable;
 import org.jruby.internal.runtime.methods.*;
 import org.jruby.ir.IRScope;
 import org.jruby.ir.JIT;
+import org.jruby.ir.interpreter.FullInterpreterContext;
 import org.jruby.ir.runtime.IRRuntimeHelpers;
 import org.jruby.java.invokers.SingletonMethodInvoker;
 import org.jruby.javasupport.JavaUtil;
@@ -615,6 +617,49 @@ public class Bootstrap {
 
         if (Options.INVOKEDYNAMIC_LOG_BINDING.load()) {
             LOG.info(site.name() + "\tbound indirectly " + method + ", " + Bootstrap.logMethod(method));
+        }
+
+        return binder.invokeVirtualQuiet(LOOKUP, "call").handle();
+    }
+
+    static MethodHandle buildMethodMissingHandle(InvokeSite site, CacheEntry entry, IRubyObject self) {
+        SmartBinder binder;
+        DynamicMethod method = entry.method;
+
+        if (site.arity >= 0) {
+            binder = SmartBinder.from(site.signature)
+                    .permute("context", "self", "arg.*", "block")
+                    .insert(2,
+                            new String[]{"rubyClass", "name", "argName"}
+                            , new Class[]{RubyModule.class, String.class, IRubyObject.class},
+                            entry.sourceModule,
+                            site.name(),
+                            self.getRuntime().newSymbol(site.methodName))
+                    .insert(0, "method", DynamicMethod.class, method)
+                    .collect("args", "arg.*");
+        } else {
+            SmartHandle fold = SmartBinder.from(
+                    site.signature
+                            .permute("context", "self", "args", "block")
+                            .changeReturn(IRubyObject[].class))
+                    .permute("args")
+                    .insert(0, "argName", IRubyObject.class, self.getRuntime().newSymbol(site.methodName))
+                    .invokeStaticQuiet(LOOKUP, Helpers.class, "arrayOf");
+
+            binder = SmartBinder.from(site.signature)
+                    .permute("context", "self", "args", "block")
+                    .fold("args2", fold)
+                    .permute("context", "self", "args2", "block")
+                    .insert(2,
+                            new String[]{"rubyClass", "name"}
+                            , new Class[]{RubyModule.class, String.class},
+                            entry.sourceModule,
+                            site.name())
+                    .insert(0, "method", DynamicMethod.class, method);
+        }
+
+        if (Options.INVOKEDYNAMIC_LOG_BINDING.load()) {
+            LOG.info(site.name() + "\tbound to method_missing for " + method + ", " + Bootstrap.logMethod(method));
         }
 
         return binder.invokeVirtualQuiet(LOOKUP, "call").handle();
@@ -1326,14 +1371,15 @@ public class Bootstrap {
 
         // This optimization can't happen until we can see into the method we're calling to know if it reifies the block
         if (false) {
-            if (scope.needsBinding()) {
-                if (scope.needsFrame()) {
+            FullInterpreterContext fic = scope.getExecutionContext();
+            if (fic.needsBinding()) {
+                if (fic.needsFrame()) {
                     binder = binder.fold(FRAME_SCOPE_BINDING);
                 } else {
                     binder = binder.fold(SCOPE_BINDING);
                 }
             } else {
-                if (scope.needsFrame()) {
+                if (fic.needsFrame()) {
                     binder = binder.fold(FRAME_BINDING);
                 } else {
                     binder = binder.fold(SELF_BINDING);
@@ -1353,7 +1399,7 @@ public class Bootstrap {
     }
 
     static String logBlock(Block block) {
-        return "[" + block.getBody() + " " + block.getFrame() + "]";
+        return "[" + block.getBody().getFile() + ":" + block.getBody().getLine() + "]";
     }
 
     private static final Binder BINDING_MAKER_BINDER = Binder.from(Binding.class, ThreadContext.class, IRubyObject.class, DynamicScope.class);

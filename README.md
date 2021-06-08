@@ -1,11 +1,11 @@
 # JRuby - an implementation of the Ruby language on the JVM
 ------------------------------------------------------------------
-# JFORG NOTES:
+# JFROG NOTES:
 This is a fork of [https://github.com/jruby/jruby] 
 
 Parts of JRuby library core are used in different areas of JFrog code (Artifactory, Package-indexer)  in order to parse and handle ruby packages and ruby gems metadata.
 
-* the 'release' branch started at version 9.2.9.0 tag in the master branch
+* the 'release' branch started at version 9.2.18.0 tag in the master branch
 * this version solves the following performance issue [https://www.jfrog.com/jira/browse/RTFACT-17453]
 
 ## BUILDING LOCALLY
@@ -20,13 +20,13 @@ Parts of JRuby library core are used in different areas of JFrog code (Artifacto
  
  cd lib
  
- mvn deploy (will deploy jruby-stdlib-jfrog-9.2.9.0.jar and pom file to repo.jfrog.io)
+ mvn deploy (will deploy jruby-stdlib-jfrog-9.2.18.0.jar and pom file to repo.jfrog.io)
  
  cd ..
  
  cd core 
  
- mvn deploy (will deploy jruby-core-jfrog-9.2.9.0.jar and pom file to repo.jfrog.io)
+ mvn deploy (will deploy jruby-core-jfrog-9.2.18.0.jar and pom file to repo.jfrog.io)
  
 ------------------------------------------------------------------
 
@@ -121,6 +121,14 @@ Project Contact: Thomas E Enebo <tom.enebo@gmail.com>
 
 ## License
 
-JRuby is licensed to you under three licenses - the EPL 2.0, GPL 2 and LGPL 2.1.
+JRuby is licensed under a tri EPL/GPL/LGPL license. You can use it,
+redistribute it and/or modify it under the terms of the:
+
+  Eclipse Public License version 2.0
+    OR
+  GNU General Public License version 2
+    OR
+  GNU Lesser General Public License version 2.1
+
 Some components have other licenses and copyright. See the [COPYING](COPYING)
 file for more specifics.

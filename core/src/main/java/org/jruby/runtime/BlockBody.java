@@ -50,7 +50,7 @@ import java.lang.invoke.MethodHandles;
 public abstract class BlockBody {
 
     protected final Signature signature;
-    protected volatile MethodHandle testBlockBody;
+    protected MethodHandle testBlockBody;
 
     public BlockBody(Signature signature) {
         this.signature = signature;
@@ -58,14 +58,6 @@ public abstract class BlockBody {
 
     public Signature getSignature() {
         return signature;
-    }
-
-    public EvalType getEvalType()  {
-        return null; // method should be abstract - isn't due compatibility
-    }
-
-    public void setEvalType(EvalType evalType) {
-        // NOOP - but "real" block bodies should track their eval-type
     }
 
     public boolean canCallDirect() {
@@ -274,7 +266,7 @@ public abstract class BlockBody {
             if (args.length == 1) {
                 // Convert value to arg-array, unwrapping where necessary
                 args = IRRuntimeHelpers.convertValueIntoArgArray(context, args[0], signature, args[0] instanceof RubyArray && type == Block.Type.NORMAL);
-            } else if (signature.arityValue() == 1 && !signature.restKwargs()) {
+            } else if (signature.arityValue() == 1 && !signature.hasKwargs()) {
                 // discard excess arguments
                 args = args.length == 0 ? context.runtime.getSingleNilArray() : new IRubyObject[] { args[0] };
             }

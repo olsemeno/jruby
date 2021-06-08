@@ -35,7 +35,7 @@ public class IRMethod extends IRScope {
         this.defNode = defn;
         this.isInstanceMethod = isInstanceMethod;
 
-        if (needsCodeCoverage) getFlags().add(IRFlags.CODE_COVERAGE);
+        if (needsCodeCoverage) setNeedsCodeCoverage();
 
         if (!getManager().isDryRun() && staticScope != null) {
             staticScope.setIRScope(this);
@@ -64,7 +64,7 @@ public class IRMethod extends IRScope {
                         ivarNames.add(((InstAsgnNode) node).getName().idString());
                     }
 
-                    node.childNodes().forEach((child) -> defaultVisit(child));
+                    node.childNodes().forEach(this::defaultVisit);
 
                     return null;
                 }
@@ -98,11 +98,11 @@ public class IRMethod extends IRScope {
         if (hasBeenBuilt()) return;
 
         IRBuilder.topIRBuilder(getManager(), this).
-                defineMethodInner(defNode, getLexicalParent(), getFlags().contains(IRFlags.CODE_COVERAGE)); // sets interpreterContext
+                defineMethodInner(defNode, getLexicalParent(), needsCodeCoverage()); // sets interpreterContext
         this.defNode = null;
     }
 
-    public synchronized BasicBlock[] prepareForCompilation() {
+    public BasicBlock[] prepareForCompilation() {
         buildMethodImpl();
 
         return super.prepareForCompilation();
