@@ -124,19 +124,6 @@ DO NOT MODIFIY - GENERATED CODE
     </dependency>
     <dependency>
       <groupId>rubygems</groupId>
-      <artifactId>jruby-openssl</artifactId>
-      <version>0.10.5</version>
-      <type>gem</type>
-      <scope>provided</scope>
-      <exclusions>
-        <exclusion>
-          <artifactId>jar-dependencies</artifactId>
-          <groupId>rubygems</groupId>
-        </exclusion>
-      </exclusions>
-    </dependency>
-    <dependency>
-      <groupId>rubygems</groupId>
       <artifactId>json</artifactId>
       <version>${json.version}</version>
       <type>gem</type>
@@ -344,7 +331,6 @@ DO NOT MODIFIY - GENERATED CODE
           <include>specifications/net-telnet-0.1.1*</include>
           <include>specifications/power_assert-${power_assert.version}*</include>
           <include>specifications/rake-${rake.version}*</include>
-          <include>specifications/test-unit-${test-unit.version}*</include>
           <include>specifications/xmlrpc-0.3.0*</include>
           <include>gems/cmath-1.0.0*/**/*</include>
           <include>gems/csv-1.0.0*/**/*</include>
@@ -365,7 +351,6 @@ DO NOT MODIFIY - GENERATED CODE
           <include>gems/net-telnet-0.1.1*/**/*</include>
           <include>gems/power_assert-${power_assert.version}*/**/*</include>
           <include>gems/rake-${rake.version}*/**/*</include>
-          <include>gems/test-unit-${test-unit.version}*/**/*</include>
           <include>gems/xmlrpc-0.3.0*/**/*</include>
           <include>cache/cmath-1.0.0*</include>
           <include>cache/csv-1.0.0*</include>
@@ -386,7 +371,6 @@ DO NOT MODIFIY - GENERATED CODE
           <include>cache/net-telnet-0.1.1*</include>
           <include>cache/power_assert-${power_assert.version}*</include>
           <include>cache/rake-${rake.version}*</include>
-          <include>cache/test-unit-${test-unit.version}*</include>
           <include>cache/xmlrpc-0.3.0*</include>
         </includes>
       </resource>
