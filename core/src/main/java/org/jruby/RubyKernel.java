@@ -65,7 +65,6 @@ import org.jruby.internal.runtime.methods.DynamicMethod;
 import org.jruby.internal.runtime.methods.JavaMethod.JavaMethodNBlock;
 import org.jruby.ir.interpreter.Interpreter;
 import org.jruby.java.proxies.ConcreteJavaProxy;
-import org.jruby.parser.StaticScope;
 import org.jruby.platform.Platform;
 import org.jruby.runtime.Arity;
 import org.jruby.runtime.Binding;
@@ -130,7 +129,6 @@ public class RubyKernel {
 
     public static RubyModule createKernelModule(Ruby runtime) {
         RubyModule module = runtime.defineModule("Kernel");
-        runtime.setKernel(module);
 
         module.defineAnnotatedMethods(RubyKernel.class);
 
@@ -146,7 +144,7 @@ public class RubyKernel {
             module.defineAnnotatedMethods(LoopMethods.class);
         }
 
-        recacheBuiltinMethods(runtime);
+        recacheBuiltinMethods(runtime, module);
 
         return module;
     }
@@ -157,11 +155,9 @@ public class RubyKernel {
      *
      * @param runtime
      */
-    static void recacheBuiltinMethods(Ruby runtime) {
-        RubyModule module = runtime.getKernel();
-
-        runtime.setRespondToMethod(module.searchMethod("respond_to?"));
-        runtime.setRespondToMissingMethod(module.searchMethod("respond_to_missing?"));
+    static void recacheBuiltinMethods(Ruby runtime, RubyModule kernelModule) {
+        runtime.setRespondToMethod(kernelModule.searchMethod("respond_to?"));
+        runtime.setRespondToMissingMethod(kernelModule.searchMethod("respond_to_missing?"));
     }
 
     @JRubyMethod(module = true, visibility = PRIVATE)
@@ -412,10 +408,10 @@ public class RubyKernel {
         if (object instanceof RubyFloat) {
             return (RubyFloat) object;
         }
-        if (object instanceof RubyString){
+        if (object instanceof RubyString) {
             RubyString str = (RubyString) object;
             ByteList bytes = str.getByteList();
-            if (bytes.getRealSize() == 0){ // rb_cstr_to_dbl case
+            if (bytes.getRealSize() == 0) { // rb_cstr_to_dbl case
                 throw runtime.newArgumentError("invalid value for Float(): " + object.inspect());
             }
 
@@ -807,7 +803,7 @@ public class RubyKernel {
 
     @JRubyMethod(name = {"block_given?", "iterator?"}, module = true, visibility = PRIVATE, reads = BLOCK)
     public static RubyBoolean block_given_p(ThreadContext context, IRubyObject recv) {
-        return context.runtime.newBoolean(context.getCurrentFrame().getBlock().isGiven());
+        return RubyBoolean.newBoolean(context, context.getCurrentFrame().getBlock().isGiven());
     }
 
     @JRubyMethod(name = {"sprintf", "format"}, required = 1, rest = true, module = true, visibility = PRIVATE)
@@ -1437,7 +1433,7 @@ public class RubyKernel {
     @JRubyMethod(name = "loop", module = true, visibility = PRIVATE)
     public static IRubyObject loop(ThreadContext context, IRubyObject recv, Block block) {
         if ( ! block.isGiven() ) {
-            return RubyEnumerator.enumeratorizeWithSize(context, recv, "loop", loopSizeFn(context));
+            return RubyEnumerator.enumeratorizeWithSize(context, recv, "loop", loopSizeFn());
         }
         final Ruby runtime = context.runtime;
         IRubyObject oldExc = runtime.getGlobalVariables().get("$!"); // Save $!
@@ -1460,13 +1456,8 @@ public class RubyKernel {
         }
     }
 
-    private static SizeFn loopSizeFn(final ThreadContext context) {
-        return new SizeFn() {
-            @Override
-            public IRubyObject size(IRubyObject[] args) {
-                return RubyFloat.newFloat(context.runtime, RubyFloat.INFINITY);
-            }
-        };
+    private static SizeFn loopSizeFn() {
+        return (context, args) -> RubyFloat.newFloat(context.runtime, RubyFloat.INFINITY);
     }
 
     @JRubyMethod(required = 2, optional = 1, module = true, visibility = PRIVATE)
@@ -1673,11 +1664,11 @@ public class RubyKernel {
     }
 
     @JRubyMethod(name = "system", required = 1, rest = true, module = true, visibility = PRIVATE)
-    public static IRubyObject system(ThreadContext context, IRubyObject recv, IRubyObject[] args) {
+    public static IRubyObject    system(ThreadContext context, IRubyObject recv, IRubyObject[] args) {
         final Ruby runtime = context.runtime;
         boolean needChdir = !runtime.getCurrentDirectory().equals(runtime.getPosix().getcwd());
 
-        if (!needChdir && PopenExecutor.nativePopenAvailable(runtime)) {
+        if (PopenExecutor.nativePopenAvailable(runtime)) {
             // MRI: rb_f_system
             long pid;
             int status;
@@ -1712,12 +1703,6 @@ public class RubyKernel {
             return runtime.getFalse();
         }
 
-        // else old JDK logic
-        if (args[0] instanceof RubyHash) {
-            runtime.getENV().merge_bang(context, (RubyHash) args[0], Block.NULL_BLOCK);
-            // drop the first element for calling systemCommon()
-            args = ArraySupport.newCopy(args, 1, args.length - 1);
-        }
         int resultCode = systemCommon(context, recv, args);
         switch (resultCode) {
             case 0: return runtime.getTrue();
@@ -1919,12 +1904,7 @@ public class RubyKernel {
         }
 
         if (block.isGiven()) {
-            sizeFn = new SizeFn() {
-                @Override
-                public IRubyObject size(IRubyObject[] args) {
-                    return block.call(context, args);
-                }
-            };
+            sizeFn = (ctx, args1) -> block.call(ctx, args1);
         }
 
         return enumeratorizeWithSize(context, self, method, args, sizeFn);

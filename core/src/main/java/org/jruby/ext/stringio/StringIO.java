@@ -458,9 +458,8 @@ public class StringIO extends RubyObject implements EncodingCapable, DataType {
     @JRubyMethod(name = {"eof", "eof?"})
     public IRubyObject eof(ThreadContext context) {
         checkReadable();
-        Ruby runtime = context.runtime;
-        if (ptr.pos < ptr.string.size()) return runtime.getFalse();
-        return runtime.getTrue();
+        if (ptr.pos < ptr.string.size()) return context.fals;
+        return context.tru;
     }
 
     private boolean isEndOfString() {
@@ -1206,13 +1205,18 @@ public class StringIO extends RubyObject implements EncodingCapable, DataType {
                 ptr.pos = olen;
             }
             if (ptr.pos == olen) {
-                EncodingUtils.encStrBufCat(runtime, ptr.string, strByteList, enc);
+                if (enc == EncodingUtils.ascii8bitEncoding(runtime) || encStr == EncodingUtils.ascii8bitEncoding(runtime)) {
+                    EncodingUtils.encStrBufCat(runtime, ptr.string, strByteList, enc);
+                    ptr.string.infectBy(str);
+                } else {
+                    ptr.string.cat19(str);
+                }
             } else {
                 strioExtend(ptr.pos, len);
                 ByteList ptrByteList = ptr.string.getByteList();
                 System.arraycopy(strByteList.getUnsafeBytes(), strByteList.getBegin(), ptrByteList.getUnsafeBytes(), ptrByteList.begin() + ptr.pos, len);
+                ptr.string.infectBy(str);
             }
-            ptr.string.infectBy(str);
             ptr.string.infectBy(this);
             ptr.pos += len;
         }
@@ -1344,10 +1348,9 @@ public class StringIO extends RubyObject implements EncodingCapable, DataType {
 
             boolean exception = true;
             IRubyObject opts = ArgsUtil.getOptionsArg(runtime, args);
-
             if (opts != context.nil) {
                 args = ArraySupport.newCopy(args, args.length - 1);
-                exception = ArgsUtil.extractKeywordArg(context, (RubyHash) opts, "exception") != context.fals;
+                exception = Helpers.extractExceptionOnlyArg(context, (RubyHash) opts);
             }
 
             IRubyObject val = self.callMethod(context, "read", args);

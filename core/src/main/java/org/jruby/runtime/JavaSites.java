@@ -300,7 +300,7 @@ public class JavaSites {
 
     public static class TimeSites {
         public final RespondToCallSite respond_to_cmp = new RespondToCallSite("<=>");
-        public final CallSite cmp = new FunctionalCachingCallSite("<=>");
+        public final CachingCallSite cmp = new FunctionalCachingCallSite("<=>");
 
         public final ThreadContext.RecursiveFunctionEx recursive_cmp = new ThreadContext.RecursiveFunctionEx<IRubyObject>() {
             @Override
@@ -322,6 +322,7 @@ public class JavaSites {
 
     public static class EnumerableSites {
         public final CheckedSites size_checked = new CheckedSites("size");
+        public final CachingCallSite to_enum = new FunctionalCachingCallSite("to_enum");
     }
 
     public static class ComparableSites {

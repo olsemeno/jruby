@@ -429,6 +429,9 @@ public final class EncodingService {
 
     public Encoding getWindowsFilesystemEncoding(Ruby ruby) {
         String encoding = SafePropertyAccessor.getProperty("file.encoding", "UTF-8");
+        if (encoding.equals("UTF8")) {
+            encoding = "UTF-8";
+        }
         Encoding filesystemEncoding = loadEncoding(ByteList.create(encoding));
 
         // Use default external if file.encoding does not point at an encoding we recognize

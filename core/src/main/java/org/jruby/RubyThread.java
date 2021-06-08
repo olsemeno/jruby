@@ -432,7 +432,6 @@ public class RubyThread extends RubyObject implements ExecutionContext {
         // it must provide an allocator that can create empty object instances which
         // initialize then fills with appropriate data.
         RubyClass threadClass = runtime.defineClass("Thread", runtime.getObject(), ObjectAllocator.NOT_ALLOCATABLE_ALLOCATOR);
-        runtime.setThread(threadClass);
 
         threadClass.setClassIndex(ClassIndex.THREAD);
         threadClass.setReifiedClass(RubyThread.class);
@@ -700,7 +699,7 @@ public class RubyThread extends RubyObject implements ExecutionContext {
         return rubyThread;
     }
 
-    protected static RubyThread startWaiterThread(final Ruby runtime, int pid, Block block) {
+    protected static RubyThread startWaiterThread(final Ruby runtime, long pid, Block block) {
         final IRubyObject waiter = runtime.getProcess().getConstantAt("Waiter"); // Process::Waiter
         final RubyThread rubyThread = new RubyThread(runtime, (RubyClass) waiter);
         rubyThread.op_aset(runtime.newSymbol("pid"), runtime.newFixnum(pid));
@@ -1004,7 +1003,7 @@ public class RubyThread extends RubyObject implements ExecutionContext {
         key = getSymbolKey(key);
         final Map<IRubyObject, IRubyObject> locals = getFiberLocals();
         synchronized (locals) {
-            return context.runtime.newBoolean(locals.containsKey(key));
+            return RubyBoolean.newBoolean(context, locals.containsKey(key));
         }
     }
 
@@ -1032,7 +1031,7 @@ public class RubyThread extends RubyObject implements ExecutionContext {
         key = getSymbolKey(key);
         final Map<IRubyObject, IRubyObject> locals = getThreadLocals();
         synchronized (locals) {
-            return context.runtime.newBoolean(locals.containsKey(key));
+            return RubyBoolean.newBoolean(context, locals.containsKey(key));
         }
     }
 
@@ -2167,6 +2166,7 @@ public class RubyThread extends RubyObject implements ExecutionContext {
             @Override
             public Object run(ThreadContext context, Lock reentrantLock) throws InterruptedException {
                 reentrantLock.lockInterruptibly();
+                heldLocks.add(lock);
                 return reentrantLock;
             }
 
@@ -2175,7 +2175,6 @@ public class RubyThread extends RubyObject implements ExecutionContext {
                 thread.getNativeThread().interrupt();
             }
         });
-        heldLocks.add(lock);
     }
 
     /**
@@ -2212,7 +2211,12 @@ public class RubyThread extends RubyObject implements ExecutionContext {
     public void unlockAll() {
         assert Thread.currentThread() == getNativeThread();
         for (Lock lock : heldLocks) {
-            lock.unlock();
+            try {
+                lock.unlock();
+            } catch (IllegalMonitorStateException imse) {
+                // don't allow a bad lock to prevent others from unlocking
+                getRuntime().getWarnings().warn("BUG: attempted to unlock a non-acquired lock " + lock + " in thread " + toString());
+            }
         }
     }
 

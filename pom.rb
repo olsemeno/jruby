@@ -64,7 +64,7 @@ project 'JRuby', 'https://github.com/jruby/jruby' do
               'polyglot.dump.readonly' => 'true',
               'jruby.plugins.version' => '1.0.10',
 
-              'json.version' => '2.2.0',
+              'json.version' => '2.5.1',
               'rspec.version' => '3.7.0',
               'rspec-core.version' => '3.7.0',
               'rspec-expectations.version' => '3.7.0',
@@ -78,18 +78,18 @@ project 'JRuby', 'https://github.com/jruby/jruby' do
               # used in ./lib/pom.rb and ./maven/jruby-stdlib/pom.rb
               'rdoc.version' => '6.1.2',
               'rake.version' => '12.3.3',
-              'jar-dependencies.version' => '0.4.0',
+              'jar-dependencies.version' => '0.4.1',
               'jruby-launcher.version' => '1.1.6',
               'ant.version' => '1.9.8',
-              'asm.version' => '7.1',
-              'jffi.version' => '1.2.22',
+              'asm.version' => '9.0',
+              'jffi.version' => '1.3.3',
               'joda.time.version' => '2.10.5' )
 
   plugin_management do
     jar( 'junit:junit:4.12',
          :scope => 'test' )
 
-    plugin( 'org.apache.felix:maven-bundle-plugin:3.5.0',
+    plugin( 'org.apache.felix:maven-bundle-plugin:4.2.1',
             'instructions' => {
               'Export-Package' =>  'org.jruby.*;version=${project.version}',
               'Import-Package' =>  '!org.jruby.*, *;resolution:=optional',
@@ -98,7 +98,7 @@ project 'JRuby', 'https://github.com/jruby/jruby' do
               'Bundle-Description' =>  '${bundle.name} ${project.version} OSGi bundle',
               'Bundle-SymbolicName' =>  '${bundle.symbolic_name}'
             } ) do
-      dependency(groupId: 'biz.aQute.bnd', artifactId: 'biz.aQute.bndlib', version: '3.5.0')
+      dependency(groupId: 'biz.aQute.bnd', artifactId: 'biz.aQute.bndlib', version: '4.3.1')
       execute_goals( 'manifest',
                      :phase => 'prepare-package' )
     end

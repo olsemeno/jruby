@@ -9,9 +9,11 @@ describe "String#swapcase" do
    "+++---111222???".swapcase.should == "+++---111222???"
   end
 
-  it "taints resulting string when self is tainted" do
-    "".taint.swapcase.tainted?.should == true
-    "hello".taint.swapcase.tainted?.should == true
+  ruby_version_is ''...'2.7' do
+    it "taints resulting string when self is tainted" do
+      "".taint.swapcase.tainted?.should == true
+      "hello".taint.swapcase.tainted?.should == true
+    end
   end
 
   describe "full Unicode case mapping" do
@@ -84,11 +86,23 @@ describe "String#swapcase!" do
     a.should == "CyBeR_pUnK11"
   end
 
+  it "modifies self in place for non-ascii-compatible encodings" do
+    a = "cYbEr_PuNk11".encode("utf-16le")
+    a.swapcase!
+    a.should == "CyBeR_pUnK11".encode("utf-16le")
+  end
+
   describe "full Unicode case mapping" do
     it "modifies self in place for all of Unicode with no option" do
       a = "äÖü"
       a.swapcase!
       a.should == "ÄöÜ"
+    end
+
+    it "works for non-ascii-compatible encodings" do
+      a = "äÖü".encode("utf-16le")
+      a.swapcase!
+      a.should == "ÄöÜ".encode("utf-16le")
     end
 
     it "updates string metadata" do
@@ -107,6 +121,12 @@ describe "String#swapcase!" do
       a = "aßet"
       a.swapcase!(:ascii)
       a.should == "AßET"
+    end
+
+    it "works for non-ascii-compatible encodings" do
+      a = "aBc".encode("utf-16le")
+      a.swapcase!(:ascii)
+      a.should == "AbC".encode("utf-16le")
     end
   end
 

@@ -94,7 +94,6 @@ public class RubyDir extends RubyObject implements Closeable {
 
     public static RubyClass createDirClass(Ruby runtime) {
         RubyClass dirClass = runtime.defineClass("Dir", runtime.getObject(), DIR_ALLOCATOR);
-        runtime.setDir(dirClass);
 
         dirClass.setClassIndex(ClassIndex.DIR);
         dirClass.setReifiedClass(RubyDir.class);
@@ -240,20 +239,18 @@ public class RubyDir extends RubyObject implements Closeable {
             } else {
                 String[] keys = flags != null ? BASE_FLAGS : BASE;
                 IRubyObject[] rets = ArgsUtil.extractKeywordArgs(context, (RubyHash) tmp, keys);
-                String base = rets[0] == null || rets[0] == context.nil ? "" : RubyFile.get_path(context, rets[0]).asJavaString();
+                if (rets[0] == null || rets[0].isNil()) return "";
+                RubyString path = RubyFile.get_path(context, rets[0]);
+                Encoding[] enc = {path.getEncoding()};
+                String base = path.getUnicodeValue();
 
                 // Deep down in glob things are unhappy if base is not absolute.
                 if (!base.isEmpty()) {
-                    JRubyFile file = new JRubyFile(base);
-
-                    // FIXME: This is a bit of a hot mess.  Deep down in the ancient caves of glob land we do not
-                    // like see a base which is not an absolute path.  JRubyFile by itself uses what I am guessing
-                    // is the JVM CWD and not the runtimes CWD so if path is not absolute I remake the thing again...
-                    if (!file.isAbsolute()) {
-                        base = new JRubyFile(runtime.getCurrentDirectory(), base).getAbsolutePath();
-                    }
+                    base = RubyFile.expandPath(context, base, enc, runtime.getCurrentDirectory(), true, false);
                 }
+
                 if (flags != null) flags[0] = rets[1] == null ? 0 : RubyNumeric.num2int(rets[1]);
+
                 return base;
             }
         }
@@ -303,7 +300,7 @@ public class RubyDir extends RubyObject implements Closeable {
         String base = globOptions(context, args, flags);
         List<ByteList> dirs;
 
-        if (!(base == null || base.isEmpty()) && !(new File(base).exists())){
+        if (base != null && !base.isEmpty() && !(JRubyFile.createResource(context, base).exists())){
             dirs = new ArrayList<ByteList>();
         } else {
             IRubyObject tmp = args[0].checkArrayType();
@@ -336,16 +333,6 @@ public class RubyDir extends RubyObject implements Closeable {
         return RubyArray.newArrayMayCopy(getRuntime(), JavaUtil.convertStringArrayToRuby(getRuntime(), snapshot, converter));
     }
 
-    @Deprecated
-    public static RubyArray entries(IRubyObject recv, IRubyObject path) {
-        return entries(recv.getRuntime().getCurrentContext(), recv, path);
-    }
-
-    @Deprecated
-    public static RubyArray entries(IRubyObject recv, IRubyObject path, IRubyObject arg, IRubyObject opts) {
-        return entries(recv.getRuntime().getCurrentContext(), recv, path, opts);
-    }
-
     /**
      * Returns an array containing all of the filenames in the given directory.
      */
@@ -361,17 +348,10 @@ public class RubyDir extends RubyObject implements Closeable {
     @JRubyMethod(name = "entries", meta = true)
     public static RubyArray entries(ThreadContext context, IRubyObject recv, IRubyObject arg, IRubyObject opts) {
         Ruby runtime = context.runtime;
-        Encoding encoding = null;
 
         RubyString path = StringSupport.checkEmbeddedNulls(runtime, RubyFile.get_path(context, arg));
 
-        if (opts instanceof RubyHash) {
-            IRubyObject encodingArg = ArgsUtil.extractKeywordArg(context, (RubyHash) opts, "encoding");
-            if (encodingArg != null && !encodingArg.isNil()) {
-                encoding = runtime.getEncodingService().getEncodingFromObject(encodingArg);
-            }
-        }
-        if (encoding == null) encoding = runtime.getDefaultEncoding();
+        Encoding encoding = getEncodingFromOpts(context, opts);
 
         return entriesCommon(context, path.asJavaString(), encoding, false);
     }
@@ -470,16 +450,13 @@ public class RubyDir extends RubyObject implements Closeable {
 
     @JRubyMethod(name = "children", meta = true)
     public static RubyArray children(ThreadContext context, IRubyObject recv, IRubyObject arg, IRubyObject opts) {
-        Encoding encoding = null;
-        if (opts instanceof RubyHash) {
-            IRubyObject encodingArg = ArgsUtil.extractKeywordArg(context, (RubyHash) opts, "encoding");
-            if (encodingArg != null && !encodingArg.isNil()) {
-                encoding = context.runtime.getEncodingService().getEncodingFromObject(encodingArg);
-            }
-        }
-        if (encoding == null) encoding = context.runtime.getDefaultEncoding();
+        Ruby runtime = context.runtime;
 
-        return entriesCommon(context, RubyFile.get_path(context, arg).asJavaString(), encoding, true);
+        RubyString path = StringSupport.checkEmbeddedNulls(runtime, RubyFile.get_path(context, arg));
+
+        Encoding encoding = getEncodingFromOpts(context, opts);
+
+        return entriesCommon(context, path.asJavaString(), encoding, true);
     }
 
     /**
@@ -523,16 +500,10 @@ public class RubyDir extends RubyObject implements Closeable {
      * to the block.
      */
     @JRubyMethod(name = "each_child", meta = true)
-    public static IRubyObject each_child(ThreadContext context, IRubyObject recv, IRubyObject arg, IRubyObject enc, Block block) {
-        RubyEncoding encoding;
+    public static IRubyObject each_child(ThreadContext context, IRubyObject recv, IRubyObject arg, IRubyObject encOpts, Block block) {
+        Encoding encoding = getEncodingFromOpts(context, encOpts);
 
-        if (enc instanceof RubyEncoding) {
-            encoding = (RubyEncoding) enc;
-        } else {
-            throw context.runtime.newTypeError(enc, context.runtime.getEncoding());
-        }
-
-        return eachChildCommon(context, recv, RubyFile.get_path(context, arg), encoding, block);
+        return eachChildCommon(context, recv, RubyFile.get_path(context, arg), encOpts, block);
     }
 
     /**
@@ -546,61 +517,70 @@ public class RubyDir extends RubyObject implements Closeable {
 
     @JRubyMethod(name = "foreach", meta = true)
     public static IRubyObject foreach(ThreadContext context, IRubyObject recv, IRubyObject path, IRubyObject encOpts, Block block) {
+        return foreachCommon(context, recv, RubyFile.get_path(context, path), encOpts, block);
+    }
+
+    private static Encoding getEncodingFromOpts(ThreadContext context, IRubyObject encOpts) {
+        Ruby runtime = context.runtime;
+
         Encoding encoding = null;
 
-        if(!encOpts.isNil()) {
-        	IRubyObject opts = TypeConverter.checkHashType(context.runtime, encOpts);
-	        IRubyObject encodingArg = ArgsUtil.extractKeywordArg(context, (RubyHash) opts, "encoding");
-	        if (encodingArg != null && !encodingArg.isNil()) {
-	        	encoding = context.runtime.getEncodingService().getEncodingFromObject(encodingArg);
-	        }
+        if (!encOpts.isNil()) {
+            IRubyObject opts = ArgsUtil.getOptionsArg(runtime, encOpts);
+
+            if (opts.isNil()) {
+                throw runtime.newArgumentError(2, 1, 1);
+            } else {
+                IRubyObject encodingArg = ArgsUtil.extractKeywordArg(context, (RubyHash) opts, "encoding");
+                if (encodingArg != null && !encodingArg.isNil()) {
+                    encoding = runtime.getEncodingService().getEncodingFromObject(encodingArg);
+                }
+            }
         }
 
-        if (encoding == null) encoding = context.runtime.getDefaultFilesystemEncoding();
+        if (encoding == null) encoding = runtime.getDefaultEncoding();
 
-        return foreachCommon(context, recv, RubyFile.get_path(context, path), encoding, block);
+        return encoding;
     }
 
-    @Deprecated
-    public static IRubyObject foreach19(ThreadContext context, IRubyObject recv, IRubyObject path, Block block) {
-        return foreachCommon(context, recv, RubyFile.get_path(context, path), null, block);
-    }
-
-    @Deprecated
-    public static IRubyObject foreach19(ThreadContext context, IRubyObject recv, IRubyObject path, IRubyObject enc, Block block) {
-        return foreachCommon(context, recv, RubyFile.get_path(context, path), context.runtime.getEncodingService().getEncodingFromObject(enc), block);
-    }
-
-    private static IRubyObject eachChildCommon(ThreadContext context, IRubyObject recv, RubyString path, RubyEncoding encoding, Block block) {
+    private static IRubyObject eachChildCommon(ThreadContext context, IRubyObject recv, RubyString path, IRubyObject encOpts, Block block) {
         final Ruby runtime = context.runtime;
+
         if (block.isGiven()) {
+            Encoding encoding = encOpts == null ? runtime.getDefaultEncoding() : getEncodingFromOpts(context, encOpts);
+
             RubyDir dir = (RubyDir) runtime.getDir().newInstance(context, path, Block.NULL_BLOCK);
 
-            dir.each_child(context, encoding == null ? runtime.getDefaultEncoding() : encoding.getEncoding(), block);
+            dir.each_child(context, encoding, block);
+
             return context.nil;
         }
 
-        if (encoding == null) {
+        if (encOpts == null) {
             return enumeratorize(runtime, recv, "each_child", path);
         }
-        return enumeratorize(runtime, recv, "each_child", path, encoding);
+
+        return enumeratorize(runtime, recv, "each_child", path, encOpts);
     }
 
-    private static IRubyObject foreachCommon(ThreadContext context, IRubyObject recv, RubyString path, Encoding encoding, Block block) {
+    private static IRubyObject foreachCommon(ThreadContext context, IRubyObject recv, RubyString path, IRubyObject encOpts, Block block) {
         final Ruby runtime = context.runtime;
+
         if (block.isGiven()) {
+            Encoding encoding = encOpts == null ? runtime.getDefaultEncoding() : getEncodingFromOpts(context, encOpts);
+
             RubyDir dir = (RubyDir) runtime.getDir().newInstance(context, path, Block.NULL_BLOCK);
 
-            dir.each(context, encoding == null ? runtime.getDefaultEncoding() : encoding, block);
+            dir.each(context, encoding, block);
+
             return context.nil;
         }
 
-        if (encoding == null) {
+        if (encOpts == null) {
             return enumeratorize(runtime, recv, "foreach", path);
         }
-        
-        IRubyObject rubyEncoding = runtime.getEncodingService().getEncoding(encoding); 
-        return enumeratorize(runtime, recv, "foreach", path, rubyEncoding);
+
+        return enumeratorize(runtime, recv, "foreach", path, encOpts);
     }
 
     /** Returns the current directory. */
@@ -754,10 +734,10 @@ public class RubyDir extends RubyObject implements Closeable {
     }
 
     @JRubyMethod(name = "each")
-    public IRubyObject each(ThreadContext context, IRubyObject encoding, Block block) {
-        if (!(encoding instanceof RubyEncoding)) throw context.runtime.newTypeError(encoding, context.runtime.getEncoding());
+    public IRubyObject each(ThreadContext context, IRubyObject encOpts, Block block) {
+        Encoding encoding = getEncodingFromOpts(context, encOpts);
 
-        return block.isGiven() ? each(context, ((RubyEncoding) encoding).getEncoding(), block) : enumeratorize(context.runtime, this, "each", encoding);
+        return block.isGiven() ? each(context, encoding, block) : enumeratorize(context.runtime, this, "each", encOpts);
     }
 
     @Deprecated
@@ -1134,6 +1114,26 @@ public class RubyDir extends RubyObject implements Closeable {
     @Deprecated
     public static RubyArray entries19(ThreadContext context, IRubyObject recv, IRubyObject arg, IRubyObject opts) {
         return entries(context, recv, arg, opts);
+    }
+
+    @Deprecated
+    public static IRubyObject foreach19(ThreadContext context, IRubyObject recv, IRubyObject path, Block block) {
+        return foreachCommon(context, recv, RubyFile.get_path(context, path), null, block);
+    }
+
+    @Deprecated
+    public static IRubyObject foreach19(ThreadContext context, IRubyObject recv, IRubyObject path, IRubyObject enc, Block block) {
+        return foreachCommon(context, recv, RubyFile.get_path(context, path), RubyHash.newKwargs(context.runtime, "encoding", enc), block);
+    }
+
+    @Deprecated
+    public static RubyArray entries(IRubyObject recv, IRubyObject path) {
+        return entries(recv.getRuntime().getCurrentContext(), recv, path);
+    }
+
+    @Deprecated
+    public static RubyArray entries(IRubyObject recv, IRubyObject path, IRubyObject arg, IRubyObject opts) {
+        return entries(recv.getRuntime().getCurrentContext(), recv, path, opts);
     }
 
 }

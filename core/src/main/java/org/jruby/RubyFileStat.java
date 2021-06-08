@@ -83,7 +83,6 @@ public class RubyFileStat extends RubyObject {
     public static RubyClass createFileStatClass(Ruby runtime) {
         // TODO: NOT_ALLOCATABLE_ALLOCATOR is probably ok here. Confirm. JRUBY-415
         final RubyClass fileStatClass = runtime.getFile().defineClassUnder("Stat",runtime.getObject(), ALLOCATOR);
-        runtime.setFileStat(fileStatClass);
 
         fileStatClass.includeModule(runtime.getModule("Comparable"));
         fileStatClass.defineAnnotatedMethods(RubyFileStat.class);
@@ -287,6 +286,7 @@ public class RubyFileStat extends RubyObject {
     @JRubyMethod(name = "gid")
     public IRubyObject gid() {
         checkInitialized();
+        if (Platform.IS_WINDOWS) return RubyFixnum.zero(getRuntime());
         return getRuntime().newFixnum(stat.gid());
     }
     
@@ -360,6 +360,7 @@ public class RubyFileStat extends RubyObject {
     @JRubyMethod(name = "uid")
     public IRubyObject uid() {
         checkInitialized();
+        if (Platform.IS_WINDOWS) return RubyFixnum.zero(getRuntime());
         return getRuntime().newFixnum(stat.uid());
     }
     
