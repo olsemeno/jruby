@@ -58,12 +58,16 @@ import org.jruby.RubyRegexp;
 import org.jruby.RubyString;
 import org.jruby.RubyStruct;
 import org.jruby.RubySymbol;
-import org.jruby.runtime.Helpers;
+import org.jruby.exceptions.UnsafeOperationException;
 import org.jruby.runtime.Constants;
+import org.jruby.runtime.Helpers;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.runtime.encoding.EncodingCapable;
 import org.jruby.util.ByteList;
 import org.jruby.util.RegexpOptions;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Unmarshals objects from strings or streams in Ruby's marshal format.
@@ -76,6 +80,8 @@ public class UnmarshalStream extends InputStream {
     private final IRubyObject proc;
     private final InputStream inputStream;
     private final boolean taint;
+    private List<Integer> acceptedTypes;
+    private boolean rejectCalls;
 
     public UnmarshalStream(Ruby runtime, InputStream in, IRubyObject proc, boolean taint) throws IOException {
         assert runtime != null;
@@ -83,7 +89,7 @@ public class UnmarshalStream extends InputStream {
 
         // Older native java ext expects proc can be null (spymemcached.jruby at least).
         if (proc == null) proc = runtime.getNil();
-        
+
         this.runtime = runtime;
         this.cache = new UnmarshalCache(runtime);
         this.proc = proc;
@@ -97,9 +103,22 @@ public class UnmarshalStream extends InputStream {
             throw new EOFException("Unexpected end of stream");
         }
 
-        if(major != Constants.MARSHAL_MAJOR || minor > Constants.MARSHAL_MINOR) {
-            throw runtime.newTypeError(String.format("incompatible marshal file format (can't be read)\n\tformat version %d.%d required; %d.%d given", Constants.MARSHAL_MAJOR, Constants.MARSHAL_MINOR, major, minor));
+        if (major != Constants.MARSHAL_MAJOR || minor > Constants.MARSHAL_MINOR) {
+            throw runtime.newTypeError(String.format(
+                    "incompatible marshal file format (can't be read)\n\tformat version %d.%d required; %d.%d given",
+                    Constants.MARSHAL_MAJOR, Constants.MARSHAL_MINOR, major, minor));
         }
+
+        this.acceptedTypes = new ArrayList<>();
+        this.rejectCalls = false;
+    }
+
+    public UnmarshalStream(Ruby runtime, InputStream in, IRubyObject proc, boolean taint,
+                           List<Integer> acceptedTypes,
+                           boolean rejectCalls) throws IOException {
+        this(runtime, in, proc, taint);
+        this.rejectCalls = rejectCalls;
+        this.acceptedTypes = acceptedTypes;
     }
 
     // r_object
@@ -176,7 +195,7 @@ public class UnmarshalStream extends InputStream {
     }
 
     private IRubyObject doCallProcForLink(IRubyObject result, int type) {
-        if (!proc.isNil() && type != ';') {
+        if (!proc.isNil() && type != ';' && !rejectCalls) {
             // return the result of the proc, but not for symbols
             return Helpers.invoke(getRuntime().getCurrentContext(), proc, "call", result);
         }
@@ -184,7 +203,7 @@ public class UnmarshalStream extends InputStream {
     }
 
     private IRubyObject doCallProcForObj(IRubyObject result) {
-        if (!proc.isNil()) {
+        if (!proc.isNil() && !rejectCalls) {
             // return the result of the proc, but not for symbols
             return Helpers.invoke(getRuntime().getCurrentContext(), proc, "call", result);
         }
@@ -193,6 +212,9 @@ public class UnmarshalStream extends InputStream {
 
     private IRubyObject unmarshalObjectDirectly(int type, MarshalState state, boolean callProc) throws IOException {
         IRubyObject rubyObj;
+        if (!acceptedTypes.isEmpty() && !acceptedTypes.contains(type)) {
+            throw new UnsafeOperationException("Unsafe Ruby type: " + type);
+        }
         switch (type) {
             case 'I':
                 MarshalState childState = new MarshalState(true);
